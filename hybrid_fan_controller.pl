@@ -1,4 +1,5 @@
-#!/usr/local/bin/perl
+#!/usr/bin/env -S perl
+
 # https://github.com/mrstux/hybrid_fan_control
 
 # This script is designed to control both the CPU and HD fans in a Supermicro X10 based system according to both
@@ -49,7 +50,8 @@
 #            mprime testing at various thread levels. Updated the cpu threasholds to 35/45/55 because of the improved
 #            responsiveness of the get_cpu_temp function
 # 2024-03-15 published to git: https://github.com/mrstux/hybrid_fan_control based on 2016-10-07 version
-# 2024-03-15 fixed typo, and added commented out cpu_temp override based on titan's version
+# 2024-03-15 various changes in preparation for TrueNAS Scale
+#            - shebang changed to /usr/bin/env as the tools are in /usr/bin not /usr/bin/local on SCALE
 ###############################################################################################
 ## CONFIGURATION
 ################
