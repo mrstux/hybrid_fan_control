@@ -1,4 +1,5 @@
 #!/usr/local/bin/perl
+# https://github.com/mrstux/hybrid_fan_control
 
 # This script is designed to control both the CPU and HD fans in a Supermicro X10 based system according to both
 # the CPU and HD temperatures in order to minimize noise while providing sufficient cooling to deal with scrubs
@@ -47,6 +48,8 @@
 #            on the actual load. Your results will vary, and for best results you should tune controller with 
 #            mprime testing at various thread levels. Updated the cpu threasholds to 35/45/55 because of the improved
 #            responsiveness of the get_cpu_temp function
+# 2024-03-15 published to git: https://github.com/mrstux/hybrid_fan_control based on 2016-10-07 version
+# 2024-03-15 fixed typo, and added commented out cpu_temp override based on titan's version
 ###############################################################################################
 ## CONFIGURATION
 ################
@@ -63,7 +66,7 @@ $med_cpu_temp = 45;	 	# will go MEDIUM when we hit, or drop below again
 $low_cpu_temp = 35;		# will go LOW when we fall below 35 again
 
 ## HD THRESHOLD TEMPS
-## HD change temperature slowly. 
+## HDs change temperature slowly. 
 ## This is the temperature that we regard as being uncomfortable. The higher this is the
 ## more silent your system.
 ## Note, it is possible for your HDs to go above this... but if your cooling is good, they shouldn't.
@@ -480,6 +483,7 @@ sub control_cpu_fan
 
 #	my $cpu_temp = get_cpu_temp_ipmi();	# no longer used, because sysctl is better, and more compatible.
 	my $cpu_temp = get_cpu_temp_sysctl();
+#	my $cpu_temp = 65;			# used to force high speed cpu fan...
 
 	my $cpu_fan_level = decide_cpu_fan_level( $cpu_temp, $old_cpu_fan_level );
 
