@@ -935,4 +935,4 @@ sub reset_bmc
 
 Let me know what you think :)
 
-WARNING: shutdown the script before performing any IPMI firmware updates, or else.
+WARNING: shutdown the script before performing any IPMI firmware updates, or [else](https://www.truenas.com/community/threads/script-hybrid-cpu-hd-fan-zone-controller.46159/post-452449).
