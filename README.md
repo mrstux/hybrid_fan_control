@@ -11,6 +11,8 @@ https://github.com/khorton/nas_fan_control
 And Sretella then ported the script to a Corsair fan controller:
 https://github.com/sretalla/nas_fan_control
 
+I have since updated the script for use on SCALE, as well as CORE.
+
 Below follows the original post:
 
 ---
