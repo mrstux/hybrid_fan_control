@@ -4,7 +4,7 @@
 
 # This script is designed to control both the CPU and HD fans in a Supermicro X10 based system according to both
 # the CPU and HD temperatures in order to minimize noise while providing sufficient cooling to deal with scrubs
-# and CPU torture tests. It may work in X9 based system, but this has not been tested.
+# and CPU torture tests. 
 
 # It relies on you having two fan zones.
 
@@ -40,18 +40,30 @@
 #            "Drives are warm, going to 75%" log message was missing an unless clause causing it to print
 #            every time
 # 2016-10-07 Replaced get_cpu_temp() function with get_cpu_temp_sysctl() which queries the kernel, instead of
-#            IPMI. This is faster, more accurate and more compatible, hopefully allowing this to work on X9
-#            systems. The original function is still present and is now called get_cpu_temp_ipmi(). 
-#            Because this is a much faster method of reading the temps,  and because its actually the max core 
-#            temp, I found that the previous cpu_hd_override_temp of 60 was too sensitive and caused the override 
-#            too often. I've bumped it up to 62, which on my system seems good. This means that if a core gets to 
-#            62C the HD fans will kick in, and this will generally bring temps back down to around 60C... depending 
-#            on the actual load. Your results will vary, and for best results you should tune controller with 
-#            mprime testing at various thread levels. Updated the cpu threasholds to 35/45/55 because of the improved
-#            responsiveness of the get_cpu_temp function
-# 2024-03-15 published to git: https://github.com/mrstux/hybrid_fan_control based on 2016-10-07 version
-# 2024-03-15 various changes in preparation for TrueNAS Scale
-#            - shebang changed to /usr/bin/env as the tools are in /usr/bin not /usr/bin/local on SCALE
+#            IPMI. This is faster, more accurate and more compatible. The original function is still present
+#            and is now called get_cpu_temp_ipmi(). Because this is a much faster method of reading the temps,
+#            and because its actually the max core temp, I found that the previous cpu_hd_override_temp of 60
+#            was too sensitive and caused the override too often. I've bumped it up to 62, which on my system
+#            seems good. This means that if a core gets to 62C the HD fans will kick in, and this will generally
+#            bring temps back down to around 60C... depending on the actual load. Your results will vary, and
+#            for best results you should tune controller with mprime testing at various thread levels. Updated
+#            the cpu threasholds to 35/45/55 because of the improved responsiveness of the get_cpu_temp function
+# 2024-03-13 Ported to TrueNAS SCALE 23.10.2 (Cobia)
+#            - updated shebang to use /usr/bin/env
+#            - updated paths:
+#              - /usr/local/bin/ipmitool -> /usr/bin/ipmitool
+#              - /usr/local/bin/smartctl -> /usr/bin/smartctl
+#            - switched to  get_cpu_temp_ipmi to read cpu temp (will probably write a scale version later)
+#            - fixed ipmitool bug by installing the enterpreise numbers. see https://forum.proxmox.com/threads/ipmi-tool-error-after-v8-upgrade.129334/
+#              `wget -O /usr/share/misc/enterprise-numbers.txt https://www.iana.org/assignments/enterprise-numbers.txt`
+#            - implement linux get_disks
+#            - implement linux sensors (lm-sensors) based cpu package temp reading
+#            - get_cpu_temp_sysctl renamed to get_cpu_temp_direct
+# 2024-03-15 published to git: https://github.com/mrstux/hybrid_fan_control
+#            - script now runs without modification on SCALE and CORE (tested with TrueNAS SCALE 23.10.2 (Cobia)
+#              and TrueNAS CORE 13.0U6.1
+#            - tools are now called without the absolute path, thus requiring PATH to be correct
+#            - detects platform, and uses different cmd strings in get_disks and get_cpu_temp_direct
 ###############################################################################################
 ## CONFIGURATION
 ################
@@ -85,8 +97,6 @@ $cpu_hd_override_temp = 62;
 ## It will mean when you CPU heats up your HD fans will be turned up to help cool the
 ## case/cpu. This would only not apply if your HDs and fans are in a separate thermal compartment.
 $hd_fans_cool_cpu = 1;		# 1 if the hd fans should spin up to cool the cpu, 0 otherwise
-
-
 
 
 #######################
@@ -134,14 +144,21 @@ $cpu_fan_header = "FAN1";
 $hd_fan_header = "FANA";
 
 
-
 ################
 ## MISC
 #######
 
+## PLATFORM
+## The platform is either "FreeBSD" or "Linux", and is determined by calling uname
+$platform = `/usr/bin/uname`; # "FreeBSD" when on CORE or "Linux" on SCALE.
+chomp $platform;
+
 ## IPMITOOL PATH
-## The script needs to know where ipmitool is
-$ipmitool = "/usr/local/bin/ipmitool";
+## ipmitool is used to invoke the IPMI tool to access the SuperMicro BMC
+$ipmitool = "ipmitool";
+
+## uncomment the following line, and replace HOST/ADMIN/PASSWORD with your IPMI credentials to access IPMI over the network 
+#$ipmitool = "$impitool -I lanplus -H HOST -U ADMIN -P PASSWORD";	# network access, necessary when running in a VM
 
 ## HD POLLING INTERVAL
 ## The controller will only poll the harddrives periodically. Since hard drives change temperature slowly
@@ -164,7 +181,6 @@ $bmc_fail_threshold	= 1; 	# will retry n times before rebooting
 
 # edit nothing below this line
 ########################################################################################################################
-
 
 
 # GLOBALS
@@ -192,6 +208,8 @@ main();
 
 sub main
 {
+	dprint(1, "Running on $platform\n");
+
 	# need to go to Full mode so we have unfettered control of Fans
 	set_fan_mode("full");
 	
@@ -270,7 +288,14 @@ sub main
 
 sub get_hd_list
 {
-	my $disk_list = `camcontrol devlist | sed 's:.*(::;s:).*::;s:,pass[0-9]*::;s:pass[0-9]*,::' | egrep '^[a]*da[0-9]+\$' | tr '\012' ' '`;
+	# the disk_list_cmd needs to return a list of space separated disks to monitor, ie "sda sdb sdc"
+	my $disk_list_cmd = $platform eq "FreeBSD" ?
+		"camcontrol devlist | sed 's:.*(::;s:).*::;s:,pass[0-9]*::;s:pass[0-9]*,::' | egrep '^[a]*da[0-9]+\$' | tr '\n' ' '"
+	:
+		"lsblk -o NAME --nodeps --noheading | egrep 'sd[a-z]+' | tr '\n' ' '"
+	;
+
+	my $disk_list = `$disk_list_cmd`;
 	dprint(3,"$disk_list\n");
 
 	my @vals = split(" ", $disk_list);
@@ -290,12 +315,11 @@ sub get_hd_temp
 	foreach my $item (@hd_list)
 	{
 		my $disk_dev = "/dev/$item";
-		my $command = "/usr/local/sbin/smartctl -A $disk_dev | grep Temperature_Celsius";
- 		
-		dprint( 3, "$command\n" );
-		
-		my $output = `$command`;
 
+		my $command = "smartctl -A $disk_dev | grep Temperature_Celsius";
+		dprint( 3, "$command\n" );
+
+		my $output = `$command`;
 		dprint( 2, "$output");
 
 		my @vals = split(" ", $output);
@@ -303,6 +327,8 @@ sub get_hd_temp
 		# grab 10th item from the output, which is the hard drive temperature (on Seagate NAS HDs)
   		my $temp = "$vals[9]";
 		chomp $temp;
+        dprint( 3, "temp: $temp\n" );
+
 		
 		if( $temp )
 		{
@@ -484,7 +510,7 @@ sub control_cpu_fan
 	my ($old_cpu_fan_level) = @_;
 
 #	my $cpu_temp = get_cpu_temp_ipmi();	# no longer used, because sysctl is better, and more compatible.
-	my $cpu_temp = get_cpu_temp_sysctl();
+	my $cpu_temp = get_cpu_temp_direct();
 #	my $cpu_temp = 65;			# used to force high speed cpu fan...
 
 	my $cpu_fan_level = decide_cpu_fan_level( $cpu_temp, $old_cpu_fan_level );
@@ -613,10 +639,15 @@ sub set_fan_mode
 # returns the maximum core temperature from the kernel to determine CPU temperature.
 # in my testing I found that the max core temperature was pretty much the same as the IPMI 'CPU Temp'
 # value, but its much quicker to read, and doesn't require X10 IPMI. And works when the IPMI is rebooting too.
-sub get_cpu_temp_sysctl
+sub get_cpu_temp_direct
 {
-	# significantly more efficient to filter to dev.cpu than to just grep the whole lot!
-	my $core_temps = `sysctl -a dev.cpu | egrep -E \"dev.cpu\.[0-9]+\.temperature\" | awk '{print \$2}' | sed 's/.\$//'`;
+    # the following command needs to return a list of temps for the cores, output is something like "50.0\n51.0\n"
+	my $core_temps = $platform eq "FreeBSD" ?
+		`sysctl -a dev.cpu | egrep -E \"dev.cpu\.[0-9]+\.temperature\" | awk '{print \$2}' | sed 's/.\$//'`
+	:
+		`sensors -A | egrep 'Core [0-9]+:' | awk '{print \$3}' | sed 's/[^0-9\.]*//g'`
+	;
+
 	chomp($core_temps);
 
 	dprint(3,"core_temps:\n$core_temps\n");
