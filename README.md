@@ -13,7 +13,7 @@ https://github.com/sretalla/nas_fan_control
 
 I have since updated the script for use on SCALE, as well as CORE.
 
-These days I launch the script with the following pre-init [command](https://www.truenas.com/community/threads/script-hybrid-cpu-hd-fan-zone-controller.46159/post-649030)
+These days I launch the script with the following post-init [command](https://www.truenas.com/community/threads/script-hybrid-cpu-hd-fan-zone-controller.46159/post-649030)
 
 `tmux new-session -d -s fanscript '/mnt/tank/server/scripts/hybrid_fan_controller.pl'`
 
