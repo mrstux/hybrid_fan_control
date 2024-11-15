@@ -158,7 +158,7 @@ chomp $platform;
 $ipmitool = "ipmitool";
 
 ## uncomment the following line, and replace HOST/ADMIN/PASSWORD with your IPMI credentials to access IPMI over the network 
-#$ipmitool = "$impitool -I lanplus -H HOST -U ADMIN -P PASSWORD";	# network access, necessary when running in a VM
+#$ipmitool = "$ipmitool -I lanplus -H HOST -U ADMIN -P PASSWORD";	# network access, necessary when running in a VM
 
 ## HD POLLING INTERVAL
 ## The controller will only poll the harddrives periodically. Since hard drives change temperature slowly
